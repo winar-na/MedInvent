@@ -1,9 +1,7 @@
 import express from 'express';
-import { getExpiryStatus } from '../controllers/stock.controller.js';
-
+import { getExpiryAlerts } from '../controllers/expiry.controller.js';
 const router = express.Router();
 
-
-router.get('/alerts', getExpiryStatus);
+router.get('/alerts', getExpiryAlerts);
 
 export default router;

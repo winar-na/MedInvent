@@ -1,5 +1,7 @@
 import express from 'express';
 
+import { testAlert } from '../utils/notifier.js';
+
 import { 
   getCurrentStock, 
   recordStockReceived, 
@@ -8,6 +10,8 @@ import {
 } from '../controllers/stock.controller.js';
 
 const router = express.Router();
+
+router.get('/test-alert', testAlert);
 
 router.get('/current', getCurrentStock);
 

@@ -1,20 +1,49 @@
 import pool from '../config/db.js';
 
-/**
- * =========================================================================
- * FEATURE 1: GET CURRENT LIVE INVENTORY STOCK
- * =========================================================================
-  */
-export const getCurrentStock = async (req, res) => {
+// Demo data for DEMO_MODE
+const demoData = [
+  { product_id: 1, product_name: 'Cetirizine 10mg', brand: '', unit: 'tabs', category: 'Drugs', department: 'Pharmacy', batch_id: 1, batch_number: 'CET-004X', supplier: 'Demo', quantity_received: 120, quantity_available: 120, purchase_price: 80, selling_price: 150, profit_per_unit: 70, potential_profit: 8400, expiry_date: '2026-09-15', date_received: '2026-01-10', days_remaining: -43, health_status: 'EXPIRED' },
+  { product_id: 2, product_name: 'Amoxicillin 500mg', brand: '', unit: 'caps', category: 'Drugs', department: 'Pharmacy', batch_id: 2, batch_number: 'AMX-2026-A', supplier: 'Demo', quantity_received: 500, quantity_available: 450, purchase_price: 150, selling_price: 250, profit_per_unit: 100, potential_profit: 45000, expiry_date: '2026-11-20', date_received: '2026-02-01', days_remaining: 23, health_status: 'SOON EXPIRING' },
+  { product_id: 3, product_name: 'Cough Syrup 100ml', brand: '', unit: 'bottle', category: 'Drugs', department: 'Pharmacy', batch_id: 3, batch_number: 'HDL-033', supplier: 'Demo', quantity_received: 50, quantity_available: 35, purchase_price: 4000, selling_price: 6500, profit_per_unit: 2500, potential_profit: 87500, expiry_date: '2026-12-05', date_received: '2026-03-10', days_remaining: 38, health_status: 'SOON EXPIRING' },
+  { product_id: 4, product_name: 'Amoxicillin/Clavulanic Acid 625mg', brand: '', unit: 'tabs', category: 'Drugs', department: 'Pharmacy', batch_id: 4, batch_number: 'AUG-8821', supplier: 'Demo', quantity_received: 200, quantity_available: 200, purchase_price: 3500, selling_price: 5000, profit_per_unit: 1500, potential_profit: 300000, expiry_date: '2027-05-18', date_received: '2026-04-01', days_remaining: 202, health_status: 'ACTIVE' },
+  { product_id: 5, product_name: 'urine dipsticks', brand: '', unit: 'pack', category: 'Lab', department: 'Lab', batch_id: 5, batch_number: '10001111000', supplier: 'Demo', quantity_received: 100, quantity_available: 100, purchase_price: 500, selling_price: 5000, profit_per_unit: 4500, potential_profit: 450000, expiry_date: '2027-11-12', date_received: '2026-05-01', days_remaining: 380, health_status: 'ACTIVE' },
+  { product_id: 6, product_name: 'Paracetamol 500mg', brand: '', unit: 'tabs', category: 'Drugs', department: 'Pharmacy', batch_id: 6, batch_number: 'PAN-9982', supplier: 'Demo', quantity_received: 500, quantity_available: 400, purchase_price: 20, selling_price: 50, profit_per_unit: 30, potential_profit: 12000, expiry_date: '2027-12-15', date_received: '2026-06-01', days_remaining: 413, health_status: 'ACTIVE' },
+  { product_id: 7, product_name: 'Amoxicillin 500mg', brand: '', unit: 'caps', category: 'Drugs', department: 'Pharmacy', batch_id: 7, batch_number: 'AMX-2028-B', supplier: 'Demo', quantity_received: 1000, quantity_available: 1000, purchase_price: 145, selling_price: 250, profit_per_unit: 105, potential_profit: 105000, expiry_date: '2028-06-30', date_received: '2026-07-01', days_remaining: 611, health_status: 'ACTIVE' },
+  { product_id: 8, product_name: 'Paracetamol 500mg', brand: '', unit: 'tabs', category: 'Drugs', department: 'Pharmacy', batch_id: 8, batch_number: 'PAN-THUNDER-99', supplier: 'Demo', quantity_received: 500, quantity_available: 500, purchase_price: 20, selling_price: 50, profit_per_unit: 30, potential_profit: 15000, expiry_date: '2028-12-31', date_received: '2026-07-15', days_remaining: 795, health_status: 'ACTIVE' },
+];
 
+const isDemo = () => process.env.DEMO_MODE === 'true';
+
+const queryWithRetry = async (text, params = []) => {
+  let retries = 3;
+  let delay = 3000;
+  while (retries > 0) {
+    try {
+      return await pool.query(text, params);
+    } catch (err) {
+      const msg = err.message || '';
+      const isNetworkError = msg.includes('terminated') || msg.includes('timeout') || msg.includes('Connection') || msg.includes('fetch failed') || msg.includes('DB_OFFLINE') || msg.includes('connect');
+
+      if (!isNetworkError) throw err;
+
+      retries--;
+      if (retries === 0) throw err;
+      console.log(`[DB RETRY]: Waiting ${delay / 1000}s... ${3 - retries}/3 - ${msg}`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+};
+
+export const getCurrentStock = async (req, res) => {
   try {
-    
     const queryText = `
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
         p.brand,
         p.unit,
+        p.category,
+        p.department,
         p.min_reorder_level,
         sb.id AS batch_id,
         sb.batch_number,
@@ -23,46 +52,68 @@ export const getCurrentStock = async (req, res) => {
         sb.quantity_available,
         sb.purchase_price,
         sb.selling_price,
+        (sb.selling_price - sb.purchase_price) AS profit_per_unit,
+        (sb.selling_price - sb.purchase_price) * sb.quantity_available AS potential_profit,
         sb.expiry_date,
-        sb.date_received
+        sb.date_received,
+        (sb.expiry_date - CURRENT_DATE) AS days_remaining,
+        CASE 
+          WHEN sb.expiry_date < CURRENT_DATE THEN 'EXPIRED'
+          WHEN sb.expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 'SOON EXPIRING'
+          ELSE 'ACTIVE'
+        END AS health_status
       FROM stock_batches sb
       JOIN products p ON sb.product_id = p.id
-      ORDER BY p.name ASC, sb.expiry_date ASC;
+      ORDER BY sb.expiry_date ASC;
     `;
+    const databaseResult = await queryWithRetry(queryText);
 
-    const databaseResult = await pool.query(queryText);
+    let rows = databaseResult.rows;
+    if (rows.length === 0 && isDemo()) rows = demoData;
 
-    console.log(`[STOCK MODULE]: Live stock requested. Found ${databaseResult.rows.length} active records.`);
+    // Calculate summary for Dashboard UGX values
+    const summary = {
+      totalBatches: rows.length,
+      stockValue: rows.reduce((acc, i) => acc + (Number(i.selling_price) * Number(i.quantity_available)), 0),
+      capitalTied: rows.reduce((acc, i) => acc + (Number(i.purchase_price) * Number(i.quantity_available)), 0),
+      potentialProfit: rows.reduce((acc, i) => acc + (Number(i.profit_per_unit || i.potential_profit / i.quantity_available || 0) * Number(i.quantity_available)), 0),
+    };
+    summary.margin = summary.capitalTied > 0 ? ((summary.potentialProfit / summary.capitalTied) * 100).toFixed(1) : 0;
 
     res.status(200).json({
       success: true,
-      count: databaseResult.rows.length,
-      data: databaseResult.rows
+      count: rows.length,
+      data: rows,
+      summary,
+      offline: false
     });
-
   } catch (error) {
-    
-    console.error('❌ Error inside getCurrentStock controller:', error.message);
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve live inventory balances from the database basement.'
-    });
+    if (error.message.includes('DB_OFFLINE') || error.message.includes('fetch failed')) {
+      if (isDemo()) {
+        const rows = demoData;
+        const summary = {
+          totalBatches: rows.length,
+          stockValue: rows.reduce((acc, i) => acc + (i.selling_price * i.quantity_available), 0),
+          capitalTied: rows.reduce((acc, i) => acc + (i.purchase_price * i.quantity_available), 0),
+          potentialProfit: rows.reduce((acc, i) => acc + (i.profit_per_unit * i.quantity_available), 0),
+        };
+        summary.margin = ((summary.potentialProfit / summary.capitalTied) * 100).toFixed(1);
+        return res.status(200).json({ success: true, count: rows.length, data: rows, summary, offline: true });
+      }
+      return res.status(503).json({ success: false, offline: true, data: [], summary: { totalBatches: 0, stockValue: 0, capitalTied: 0, potentialProfit: 0, margin: 0 } });
+    }
+    console.error('❌ getCurrentStock:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to retrieve live inventory.' });
   }
 };
 
-/**
- * =========================================================================
- * FEATURE 2: LIVE EXPIRY MONITORING RADAR
- * =========================================================================
-*/
 export const getExpiryStatus = async (req, res) => {
   try {
-    
     const queryText = `
       SELECT 
         sb.id AS batch_id,
         p.name AS product_name,
+        p.category,
         sb.batch_number,
         sb.quantity_available,
         sb.expiry_date,
@@ -77,213 +128,76 @@ export const getExpiryStatus = async (req, res) => {
       WHERE sb.quantity_available > 0
       ORDER BY sb.expiry_date ASC;
     `;
+    const databaseResult = await queryWithRetry(queryText);
+    let rows = databaseResult.rows;
+    if (rows.length === 0 && isDemo()) rows = demoData.filter(d => d.quantity_available > 0);
 
-    const databaseResult = await pool.query(queryText);
-    console.log(`[EXPIRY MODULE]: Expiry check performed. Categorized ${databaseResult.rows.length} batches.`);
-
-    res.status(200).json({
-      success: true,
-      count: databaseResult.rows.length,
-      data: databaseResult.rows
-    });
-
+    res.status(200).json({ success: true, count: rows.length, data: rows, offline: false });
   } catch (error) {
-    console.error('❌ Error inside getExpiryStatus controller:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process calendar expiry metrics from the database basement.'
-    });
+    if (error.message.includes('DB_OFFLINE') || error.message.includes('fetch failed')) {
+      if (isDemo()) return res.status(200).json({ success: true, count: demoData.length, data: demoData, offline: true });
+      return res.status(503).json({ success: false, offline: true, data: [] });
+    }
+    console.error('❌ getExpiryStatus:', error.message);
+    res.status(500).json({ success: false, message: 'Failed expiry check.' });
   }
 };
 
-/**
- * =========================================================================
- * FEATURE 3: RECORD NEWLY RECEIVED STOCK ARRIVALS
- * ========================================================================= 
-**/
 export const recordStockReceived = async (req, res) => {
-  
-  const {
-    product_id,
-    batch_number,
-    supplier,
-    quantity_received,
-    purchase_price,
-    selling_price,
-    expiry_date
-  } = req.body;
+  const { product_id, batch_number, supplier, quantity_received, quantity_available, purchase_price, selling_price, expiry_date, date_received } = req.body;
 
   if (!product_id || !batch_number || !quantity_received || !purchase_price || !selling_price || !expiry_date) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Failure: Missing required fields. Ensure batch details and prices are filled.'
-    });
+    return res.status(400).json({ success: false, message: 'Missing required fields.' });
   }
 
   try {
-    
     const insertQueryText = `
       INSERT INTO stock_batches 
-        (product_id, batch_number, supplier, quantity_received, quantity_available, purchase_price, selling_price, expiry_date)
-      VALUES 
-        ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *;
+        (product_id, batch_number, supplier, quantity_received, quantity_available, purchase_price, selling_price, expiry_date, date_received)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;
     `;
-
-    const queryValues = [
-      product_id,
-      batch_number,
-      supplier,
-      quantity_received,
-      quantity_received, 
-      purchase_price,
-      selling_price,
-      expiry_date
-    ];
-
-    const databaseResult = await pool.query(insertQueryText, queryValues);
-    
-    const newlyCreatedBatch = databaseResult.rows[0];
-    console.log(`[STOCK MODULE]: Successfully recorded new shipment batch: ${newlyCreatedBatch.batch_number}`);
-
-    
-    res.status(201).json({
-      success: true,
-      message: 'New stock shipment successfully written to the inventory database.',
-      insertedBatch: newlyCreatedBatch
-    });
-
+    const values = [product_id, batch_number, supplier, quantity_received, quantity_available || quantity_received, purchase_price, selling_price, expiry_date, date_received || new Date()];
+    const result = await queryWithRetry(insertQueryText, values);
+    res.status(201).json({ success: true, message: 'New batch saved with profit tracking.', insertedBatch: result.rows[0] });
   } catch (error) {
-    console.error('❌ Error inside recordStockReceived controller:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to commit new stock entry down into the database basement.'
-    });
+    if (error.message.includes('DB_OFFLINE') || error.message.includes('fetch failed')) return res.status(503).json({ success: false, offline: true, message: 'No internet - cannot save now' });
+    console.error('❌ recordStockReceived:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to save batch.' });
   }
 };
 
-
-/**
- * =========================================================================
- * FEATURE 4: REORDERING ALERTS & LOW STOCK RADAR
- * =========================================================================
-  */
 export const getReorderAlerts = async (req, res) => {
   try {
-    
     const queryText = `
-      SELECT 
-        p.id AS product_id,
-        p.name AS product_name,
-        p.brand,
-        p.unit,
-        p.min_reorder_level,
-        COALESCE(SUM(sb.quantity_available), 0) AS total_stock_available,
-        CASE 
-          WHEN COALESCE(SUM(sb.quantity_available), 0) = 0 THEN 'CRITICAL STOCKOUT'
-          ELSE 'LOW STOCK'
-        END AS alert_status
-      FROM products p
-      LEFT JOIN stock_batches sb ON p.id = sb.product_id
-      GROUP BY p.id, p.name, p.brand, p.unit, p.min_reorder_level
-      HAVING COALESCE(SUM(sb.quantity_available), 0) <= p.min_reorder_level
+      SELECT p.id, p.name AS product_name, p.brand, p.unit, p.category, p.min_reorder_level,
+        COALESCE(SUM(sb.quantity_available), 0) AS total_stock_available
+      FROM products p LEFT JOIN stock_batches sb ON p.id = sb.product_id
+      GROUP BY p.id HAVING COALESCE(SUM(sb.quantity_available), 0) <= p.min_reorder_level
       ORDER BY total_stock_available ASC;
     `;
-
-    
-    const databaseResult = await pool.query(queryText);
-    
-    console.log(`[REORDER MODULE]: Calculation complete. Found ${databaseResult.rows.length} items needing restock.`);
-
-    
-    res.status(200).json({
-      success: true,
-      count: databaseResult.rows.length,
-      data: databaseResult.rows
-    });
-
+    const result = await queryWithRetry(queryText);
+    let rows = result.rows;
+    if (rows.length === 0 && isDemo()) rows = [];
+    res.status(200).json({ success: true, count: rows.length, data: rows, offline: false });
   } catch (error) {
-    console.error('❌ Error inside getReorderAlerts controller:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process low stock calculations from the database basement.'
-    });
+    if (error.message.includes('DB_OFFLINE') || error.message.includes('fetch failed')) return res.status(503).json({ success: false, offline: true, data: [] });
+    res.status(500).json({ success: false, message: 'Reorder check failed.' });
   }
 };
-
-/**
- * =========================================================================
- * FEATURE 5: RECORD STOCK DISPENSED / USED
- * =========================================================================
-**/
 
 export const recordStockDispensed = async (req, res) => {
-  
   const { batch_id, quantity_dispensed } = req.body;
-
-  if (!batch_id || !quantity_dispensed || quantity_dispensed <= 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Failure: Invalid batch number or quantity requested.'
-    });
-  }
-
+  if (!batch_id || !quantity_dispensed) return res.status(400).json({ success: false, message: 'Invalid batch or qty' });
   try {
-    
-    const checkQueryText = `
-      SELECT quantity_available, batch_number 
-      FROM stock_batches 
-      WHERE id = $1;
-    `;
-    const checkResult = await pool.query(checkQueryText, [batch_id]);
+    const check = await queryWithRetry('SELECT quantity_available, batch_number FROM stock_batches WHERE id = $1', [batch_id]);
+    if (!check.rows.length) return res.status(404).json({ success: false, message: 'Batch not found' });
+    if (check.rows[0].quantity_available < quantity_dispensed) return res.status(400).json({ success: false, message: `Not enough in ${check.rows[0].batch_number}` });
 
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Database Failure: The specified batch container was not found.'
-      });
-    }
-
-    const currentBatch = checkResult.rows[0];
-
-    
-    if (currentBatch.quantity_available < quantity_dispensed) {
-      return res.status(400).json({
-        success: false,
-        message: `Stockout Warning: Not enough items left in Batch ${currentBatch.batch_number}. Available: ${currentBatch.quantity_available}, Requested: ${quantity_dispensed}`
-      });
-    }
-
-    const updateBatchText = `
-      UPDATE stock_batches 
-      SET quantity_available = quantity_available - $1 
-      WHERE id = $2 
-      RETURNING *;
-    `;
-    await pool.query(updateBatchText, [quantity_dispensed, batch_id]);
-
-    const insertTransactionText = `
-      INSERT INTO stock_transactions (batch_id, quantity) 
-      VALUES ($1, $2) 
-      RETURNING *;
-    `;
-    const transactionResult = await pool.query(insertTransactionText, [batch_id, quantity_dispensed]);
-
-    console.log(`[DISPENSE MODULE]: Subtracted ${quantity_dispensed} items from Batch ID: ${batch_id}`);
-
-    res.status(201).json({
-      success: true,
-      message: 'Stock usage successfully logged, and live shelf balances updated.',
-      transactionDetails: transactionResult.rows[0]
-    });
-
+    await queryWithRetry('UPDATE stock_batches SET quantity_available = quantity_available - $1 WHERE id = $2', [quantity_dispensed, batch_id]);
+    const trans = await queryWithRetry('INSERT INTO stock_transactions (batch_id, quantity) VALUES ($1, $2) RETURNING *', [batch_id, quantity_dispensed]);
+    res.status(201).json({ success: true, transactionDetails: trans.rows[0] });
   } catch (error) {
-    console.error('❌ Error inside recordStockDispensed controller:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process stock deduction down in the database basement.'
-    });
+    if (error.message.includes('DB_OFFLINE') || error.message.includes('fetch failed')) return res.status(503).json({ success: false, offline: true, message: 'No internet - sale not saved' });
+    res.status(500).json({ success: false, message: 'Dispense failed' });
   }
 };
-
-
