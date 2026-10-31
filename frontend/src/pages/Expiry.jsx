@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
 export default function Expiry() {
   const [stock, setStock] = useState([])
   const [blood, setBlood] = useState([])
@@ -9,7 +11,7 @@ export default function Expiry() {
   const [form, setForm] = useState({ component:'Whole Blood', blood_group:'O+', unit_number:'', collected_date:'', expiry_date:'' })
 
   const fetchData = () => {
-    axios.get('http://localhost:5000/api/expiry/alerts')
+    axios.get(`${API_URL}/expiry/alerts`)
       .then(res => {
         setStock(res.data.stock || res.data.data || [])
         setBlood(res.data.blood || [])
@@ -35,7 +37,7 @@ export default function Expiry() {
   const addBlood = async (e) => {
     e.preventDefault();
     if(!/^[0-9]{9}$/.test(form.unit_number)) return alert('9 digits required');
-    await axios.post('http://localhost:5000/api/blood', form);
+    await axios.post(`${API_URL}/blood`, form);
     setForm({ component:'Whole Blood', blood_group:'O+', unit_number:'', collected_date:'', expiry_date:'' })
     fetchData();
   }
