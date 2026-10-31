@@ -12,12 +12,13 @@ import './utils/notifier.js';
 import { testAlert } from './utils/notifier.js';
 
 const app = express();
-
-// cors() was open, this allows localhost + Vercel for deployment
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://medinvent.vercel.app', /vercel\.app$/],
-  credentials: true
+  origin: ['http://localhost:5173', 'https://med-invent.vercel.app', 'https://medinvent.vercel.app', /vercel\.app$/],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 app.use(express.json());
 
 app.get('/', (req, res) => res.send('MedInvent API running - Go to /api/health'));
