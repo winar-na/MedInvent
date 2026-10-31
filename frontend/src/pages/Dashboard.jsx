@@ -1,16 +1,18 @@
 import { useEffect, useState, useMemo } from 'react'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
 export default function Dashboard(){
   const [batches, setBatches] = useState([])
   const [expiry, setExpiry] = useState({ stock: [], blood: [], total: 0 })
 
   useEffect(()=>{
-    axios.get('http://localhost:5000/api/stock/current')
+    axios.get(`${API_URL}/stock/current`)
       .then(r=> setBatches(r.data.data || []))
 
     // FIX - This is why chart was missing in your screenshot
-    axios.get('http://localhost:5000/api/expiry/alerts')
+    axios.get(`${API_URL}/expiry/alerts`)
       .then(r=> setExpiry({ stock: r.data.stock || [], blood: r.data.blood || [], total: r.data.total || 0 }))
       .catch(()=>{})
   },[])
