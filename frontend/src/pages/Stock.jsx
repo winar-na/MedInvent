@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
 function Toast({ message, onClose }) {
   if (!message) return null;
   return (
     <div className="fixed top-4 right-4 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl z-50 flex gap-3 items-center text-sm">
-      <span>✅ {message}</span>
+      <span> {message}</span>
       <button onClick={onClose} className="bg-white/10 px-2.5 py-1 rounded-full">✕</button>
     </div>
   )
@@ -38,7 +40,7 @@ export default function Stock() {
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const loadProducts = async () => {
-    const res = await axios.get('http://localhost:5000/api/products');
+    const res = await axios.get(`${API_URL}/products`);
     setProducts(res.data.data || res.data);
   }
   useEffect(() => { loadProducts() }, [])
@@ -57,7 +59,7 @@ export default function Stock() {
 
   const handleProductSave = async (e) => {
     e.preventDefault();
-    await axios.post('http://localhost:5000/api/products', {
+    await axios.post(`${API_URL}/products`, {
       ...productForm,
       min_reorder_level: Number(productForm.min_reorder_level)
     });
@@ -69,7 +71,7 @@ export default function Stock() {
 
   const handleBatchSave = async (e) => {
     e.preventDefault();
-    await axios.post('http://localhost:5000/api/stock/received', {
+    await axios.post(`${API_URL}/stock/received`, {
       ...batchForm,
       product_id: Number(batchForm.product_id),
       quantity_received: Number(batchForm.quantity_received),
@@ -108,7 +110,7 @@ export default function Stock() {
                   <option value="drug"> Drug / Medicine</option>
                   <option value="lab"> Lab Reagent / Chemical/test kit</option>
                   <option value="consumable"> Consumable (Gloves, Syringes)</option>
-                  <option value="equipment">🔬 Equipment</option>
+                  <option value="equipment"> Equipment</option>
                 </select>
               </div>
               <div>
