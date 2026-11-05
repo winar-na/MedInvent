@@ -1,0 +1,11 @@
+{ 
+"name": "MedInvent", 
+"short_name": "MedInvent", 
+"start_url": "/", 
+"display": "standalone", 
+"background_color": "#ffffff", 
+"theme_color": "#0f766e", 
+"icons": [{ "src": "/logo.png", 
+"sizes": "512x512",
+ "type": "image/png" }] 
+}

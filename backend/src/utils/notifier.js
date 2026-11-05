@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
-import pool from '../config/db.js';
+import pool from '../config/db.config.js';
 
 console.log('[Notifier] Email + WhatsApp expiry alerts loaded - <10 days mode');
 

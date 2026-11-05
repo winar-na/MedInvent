@@ -1,13 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import pool from './config/db.js';
+import pool from './config/db.config.js';
 
 import stockRoutes from './routes/stock.routes.js';
 import expiryRoutes from './routes/expiry.routes.js';
 import productRoutes from './routes/products.routes.js';
 import bloodRoutes from './routes/blood.routes.js';
-
+import authRoutes from './routes/auth.routes.js'; 
+import { authMiddleware } from './middleware/auth.middleware.js';
 import './utils/notifier.js';
 import { testAlert } from './utils/notifier.js';
 
@@ -15,7 +16,7 @@ const app = express();
 
 // cors() was open, this allows localhost + Vercel for deployment
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://medinvent.vercel.app', /vercel\.app$/],
+  origin: ['http://localhost:5173', 'https://med-invent.vercel.app', /vercel\.app$/],
   credentials: true
 }));
 app.use(express.json());
@@ -36,9 +37,8 @@ app.get('/api/test-db', async (req, res) => {
 
 app.get('/api/test-alert', testAlert);
 
-app.use('/api/stock', stockRoutes);
-app.use('/api/expiry', expiryRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/blood', bloodRoutes);
-
+app.use('/api/stock', authMiddleware, stockRoutes);
+app.use('/api/expiry', authMiddleware, expiryRoutes);
+app.use('/api/products', authMiddleware, productRoutes);
+app.use('/api/blood', authMiddleware, bloodRoutes);
 export default app;
